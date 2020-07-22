@@ -38,7 +38,7 @@ func main() {
 	r.PUT("/api/:authkey/:key", set)
 
 	srv := &http.Server{
-		Addr:    ":8080",
+		Addr:    ":8000",
 		Handler: r,
 	}
 
