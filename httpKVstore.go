@@ -21,7 +21,8 @@ var db *badger.DB
 func main() {
 	nuCPU := runtime.NumCPU()
 	runtime.GOMAXPROCS(nuCPU)
-	authkey = os.Getenv("authkey")
+	authkey = os.Getenv("AUTHKEY")
+	log.Println(authkey)
 
 	var err error
 	db, err = badger.Open(badger.DefaultOptions("./badger"))
@@ -109,7 +110,7 @@ func get(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, string(value))
+	c.Data(http.StatusOK, "application/json", value)
 }
 
 func set(c *gin.Context) {
