@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -10,13 +11,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/dgraph-io/badger"
+	"github.com/boltdb/bolt"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
 var authkey string
-var db *badger.DB
+var db *bolt.DB
 
 func main() {
 	nuCPU := runtime.NumCPU()
@@ -25,11 +26,19 @@ func main() {
 	log.Println(authkey)
 
 	var err error
-	db, err = badger.Open(badger.DefaultOptions("./badger"))
+	db, err := bolt.Open("my.db", 0600, &bolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
+
+	db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte("main"))
+		if err != nil {
+			return fmt.Errorf("create bucket: %s", err)
+		}
+		return nil
+	})
 
 	//gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
@@ -93,19 +102,14 @@ func get(c *gin.Context) {
 	}
 	var value []byte
 
-	err := db.View((func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte(key))
-		if err != nil {
-			return err
-		}
-		value, err = item.ValueCopy(nil)
-		if err != nil {
-			return err
-		}
+	db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("main"))
+		v := b.Get([]byte(key))
+		copy(value, v)
 		return nil
-	}))
+	})
 
-	if err != nil {
+	if value == nil {
 		c.Status(http.StatusNotFound)
 		return
 	}
@@ -125,8 +129,9 @@ func set(c *gin.Context) {
 	}
 	log.Println("Newval: ", newValue)
 
-	err = db.Update(func(txn *badger.Txn) error {
-		err := txn.Set([]byte(key), []byte(newValue))
+	err = db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("main"))
+		err := b.Put([]byte(key), newValue)
 		return err
 	})
 
