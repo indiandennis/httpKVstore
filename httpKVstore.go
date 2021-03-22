@@ -26,19 +26,23 @@ func main() {
 	log.Println(authkey)
 
 	var err error
-	db, err := bolt.Open("my.db", 0600, &bolt.Options{Timeout: 1 * time.Second})
+	db, err = bolt.Open("my.db", 0600, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
 
-	db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte("main"))
+	err = db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte("DB"))
 		if err != nil {
-			return fmt.Errorf("create bucket: %s", err)
+			return fmt.Errorf("could not create bucket: %v", err)
 		}
 		return nil
 	})
+
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	//gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
@@ -96,18 +100,22 @@ func get(c *gin.Context) {
 		return
 	}
 	key := c.Param("key")
+	fmt.Println("key: " + key)
 	if key == "" {
 		c.Status(http.StatusNotFound)
 		return
 	}
+
 	var value []byte
 
 	db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("main"))
-		v := b.Get([]byte(key))
-		copy(value, v)
+		value = b.Get([]byte(key))
+
 		return nil
 	})
+
+	//fmt.Println(string(value))
 
 	if value == nil {
 		c.Status(http.StatusNotFound)
@@ -127,15 +135,18 @@ func set(c *gin.Context) {
 		c.Status(http.StatusNotFound)
 		return
 	}
-	log.Println("Newval: ", newValue)
+	//log.Println("Newval: ", string(newValue))
 
 	err = db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("main"))
-		err := b.Put([]byte(key), newValue)
-		return err
+		err = tx.Bucket([]byte("main")).Put([]byte(key), newValue)
+		if err != nil {
+			return fmt.Errorf("could not set: %v", err)
+		}
+		return nil
 	})
 
 	if err != nil {
+		fmt.Println(err)
 		c.Status(http.StatusNotFound)
 		return
 	}
